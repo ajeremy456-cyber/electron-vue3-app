@@ -11,49 +11,58 @@ const api = {
 }
 
 // TikTok IPC 頻道
-contextBridge.exposeInMainWorld('tiktok', {
-  // 連接直播間
+const tiktok = {
   connect: (uniqueId) => ipcRenderer.invoke('tiktok:connect', uniqueId),
-
-  // 中斷連線
   disconnect: () => ipcRenderer.invoke('tiktok:disconnect'),
-
-  // 取得連線狀態
   status: () => ipcRenderer.invoke('tiktok:status'),
 
-  // 監聽留言
   onChat: (callback) => {
     ipcRenderer.on('tiktok:chat', (_, data) => callback(data))
   },
-
-  // 監聽禮物
   onGift: (callback) => {
     ipcRenderer.on('tiktok:gift', (_, data) => callback(data))
   },
-
-  // 監聽成員進場
   onMember: (callback) => {
     ipcRenderer.on('tiktok:member', (_, data) => callback(data))
   },
-
-  // 監聽直播結束
   onStreamEnd: (callback) => {
     ipcRenderer.on('tiktok:streamEnd', (_, data) => callback(data))
   },
-
-  // 監聽中斷
   onDisconnect: (callback) => {
     ipcRenderer.on('tiktok:disconnect', (_, data) => callback(data))
   },
-
-  // 移除監聽
+  onOrder: (callback) => {
+    ipcRenderer.on('tiktok:order', (_, data) => callback(data))
+  },
   removeAllListeners: () => {
-    ipcRenderer.removeAllListeners('tiktok:chat')
-    ipcRenderer.removeAllListeners('tiktok:gift')
-    ipcRenderer.removeAllListeners('tiktok:member')
-    ipcRenderer.removeAllListeners('tiktok:streamEnd')
-    ipcRenderer.removeAllListeners('tiktok:disconnect')
+    ;['chat', 'gift', 'member', 'streamEnd', 'disconnect', 'order'].forEach((ev) => {
+      ipcRenderer.removeAllListeners(`tiktok:${ev}`)
+    })
   }
-})
+}
 
+// Database IPC 頻道
+const db = {
+  // Messages
+  getMessages: (limit, offset) => ipcRenderer.invoke('db:getMessages', limit, offset),
+  clearMessages: () => ipcRenderer.invoke('db:clearMessages'),
+  exportMessages: () => ipcRenderer.invoke('db:exportMessages'),
+
+  // Keyword Rules
+  getKeywordRules: () => ipcRenderer.invoke('db:getKeywordRules'),
+  addKeywordRule: (keyword, autoReply, action) =>
+    ipcRenderer.invoke('db:addKeywordRule', keyword, autoReply, action),
+  updateKeywordRule: (id, updates) =>
+    ipcRenderer.invoke('db:updateKeywordRule', id, updates),
+  deleteKeywordRule: (id) => ipcRenderer.invoke('db:deleteKeywordRule', id),
+
+  // Orders
+  getOrders: (limit) => ipcRenderer.invoke('db:getOrders', limit),
+  deleteOrder: (id) => ipcRenderer.invoke('db:deleteOrder', id),
+  clearOrders: () => ipcRenderer.invoke('db:clearOrders'),
+  exportOrders: () => ipcRenderer.invoke('db:exportOrders')
+}
+
+contextBridge.exposeInMainWorld('tiktok', tiktok)
+contextBridge.exposeInMainWorld('db', db)
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -1,100 +1,270 @@
 <template>
-  <div class="max-w-2xl space-y-6">
+  <div class="space-y-8">
+    <!-- 💬 關鍵字規則 -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 class="text-lg font-semibold mb-4">⚙️ 應用程式設定</h3>
-
-      <div class="space-y-4">
+      <div class="flex items-center justify-between mb-5">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">直播間預設用戶名</label>
-          <input
-            v-model="settings.defaultUsername"
-            type="text"
-            class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="輸入預設用戶名"
-          />
+          <h2 class="text-lg font-semibold text-gray-800">💬 關鍵字規則</h2>
+          <p class="text-sm text-gray-500 mt-1">設定關鍵字，訊息包含關鍵字時自動列入準訂單</p>
         </div>
-
-        <div>
-          <label class="flex items-center gap-3 cursor-pointer">
-            <input
-              v-model="settings.autoConnect"
-              type="checkbox"
-              class="w-5 h-5 rounded text-blue-600"
-            />
-            <span class="text-sm text-gray-700">啟動時自動連接上一個直播間</span>
-          </label>
-        </div>
-
-        <div>
-          <label class="flex items-center gap-3 cursor-pointer">
-            <input
-              v-model="settings.notifications"
-              type="checkbox"
-              class="w-5 h-5 rounded text-blue-600"
-            />
-            <span class="text-sm text-gray-700">啟用桌面通知</span>
-          </label>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">截圖儲存路徑</label>
-          <input
-            v-model="settings.savePath"
-            type="text"
-            class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="選擇資料夾"
-          />
-        </div>
+        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+          {{ rulesStore.rules.length }} 條規則
+        </span>
       </div>
 
-      <div class="mt-6 pt-4 border-t border-gray-200 flex gap-3">
-        <button
-          @click="saveSettings"
-          class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+      <!-- 新增規則 -->
+      <div class="flex gap-2 mb-5">
+        <input
+          v-model="newKeyword"
+          type="text"
+          placeholder="關鍵字（例：購買、訂購）"
+          class="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          @keyup.enter="addRule"
+        />
+        <input
+          v-model="newAutoReply"
+          type="text"
+          placeholder="自動回覆（可選）"
+          class="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          @keyup.enter="addRule"
+        />
+        <select
+          v-model="newAction"
+          class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
         >
-          儲存設定
-        </button>
+          <option value="order">列入訂單</option>
+          <option value="reply">自動回覆</option>
+          <option value="both">兩者皆執行</option>
+        </select>
         <button
-          @click="resetSettings"
-          class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+          @click="addRule"
+          :disabled="!newKeyword.trim()"
+          class="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
         >
-          重置
+          新增
         </button>
+      </div>
+
+      <!-- 規則列表 -->
+      <div class="space-y-2">
+        <div v-if="rulesStore.rules.length === 0" class="text-center text-gray-400 py-6">
+          尚無關鍵字規則
+        </div>
+        <div
+          v-for="rule in rulesStore.rules"
+          :key="rule.id"
+          class="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 bg-gray-50"
+        >
+          <!-- Toggle -->
+          <button
+            @click="toggleRule(rule)"
+            class="flex-shrink-0 w-10 h-6 rounded-full transition-colors"
+            :class="rule.enabled ? 'bg-green-500' : 'bg-gray-300'"
+          >
+            <div
+              class="w-4 h-4 bg-white rounded-full shadow transform transition-transform mt-1"
+              :class="rule.enabled ? 'translate-x-5' : 'translate-x-1'"
+            />
+          </button>
+
+          <!-- Keyword -->
+          <div class="flex-shrink-0 min-w-[120px]">
+            <span class="font-semibold text-blue-600">「{{ rule.keyword }}」</span>
+          </div>
+
+          <!-- Auto reply -->
+          <div class="flex-1 min-w-0">
+            <span v-if="rule.auto_reply" class="text-sm text-gray-500">
+              回覆：{{ rule.auto_reply }}
+            </span>
+            <span v-else class="text-xs text-gray-400 italic">無自動回覆</span>
+          </div>
+
+          <!-- Action badge -->
+          <span class="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600 flex-shrink-0">
+            {{ actionLabel(rule.action) }}
+          </span>
+
+          <!-- Delete -->
+          <button
+            @click="deleteRule(rule.id)"
+            class="flex-shrink-0 text-red-400 hover:text-red-600 text-sm"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </div>
 
+    <!-- 📦 準訂單 -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h3 class="text-lg font-semibold mb-4">ℹ️ 關於</h3>
-      <div class="space-y-2 text-sm text-gray-600">
-        <div>版本：v1.0.0</div>
-        <div>Electron + Vue3 + TailwindCSS</div>
-        <div>作者：Jeremy</div>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-800">📦 準訂單明細</h2>
+          <p class="text-sm text-gray-500 mt-1">被關鍵字觸發的訊息自動列入這裡</p>
+        </div>
+        <div class="flex gap-2">
+          <button
+            @click="ordersStore.fetchOrders()"
+            class="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          >
+            重新整理
+          </button>
+          <button
+            @click="ordersStore.exportOrders()"
+            class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            匯出 JSON
+          </button>
+          <button
+            @click="ordersStore.clearOrders()"
+            class="px-4 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+          >
+            清除全部
+          </button>
+        </div>
+      </div>
+
+      <!-- 訂單列表 -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-gray-500 border-b">
+              <th class="pb-2 font-medium">時間</th>
+              <th class="pb-2 font-medium">觸發關鍵字</th>
+              <th class="pb-2 font-medium">用戶</th>
+              <th class="pb-2 font-medium">內容</th>
+              <th class="pb-2 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="ordersStore.orders.length === 0">
+              <td colspan="5" class="py-6 text-center text-gray-400">尚無訂單記錄</td>
+            </tr>
+            <tr
+              v-for="order in ordersStore.orders"
+              :key="order.id"
+              class="border-b border-gray-50 hover:bg-gray-50"
+            >
+              <td class="py-2 text-gray-500">{{ order.triggered_at }}</td>
+              <td class="py-2">
+                <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                  {{ order.keyword }}
+                </span>
+              </td>
+              <td class="py-2 font-medium text-gray-800">{{ order.nickname }}</td>
+              <td class="py-2 text-gray-600 max-w-xs truncate">{{ order.text }}</td>
+              <td class="py-2">
+                <button
+                  @click="ordersStore.deleteOrder(order.id)"
+                  class="text-red-400 hover:text-red-600 text-xs"
+                >
+                  刪除
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-2 text-xs text-gray-400 text-right">
+        共 {{ ordersStore.orders.length }} 筆
+      </div>
+    </div>
+
+    <!-- 📊 訊息匯出 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 訊息管理</h2>
+      <div class="flex gap-3">
+        <button
+          @click="loadHistory"
+          class="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+        >
+          讀取歷史訊息
+        </button>
+        <button
+          @click="exportMessages"
+          class="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+        >
+          匯出訊息 JSON
+        </button>
+        <button
+          @click="clearAllMessages"
+          class="px-5 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm"
+        >
+          清除訊息
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRulesStore } from '@/stores/rules'
+import { useOrdersStore } from '@/stores/orders'
+import databaseService from '@/services/database'
 
-const settings = ref({
-  defaultUsername: '',
-  autoConnect: false,
-  notifications: true,
-  savePath: ''
+const rulesStore = useRulesStore()
+const ordersStore = useOrdersStore()
+
+const newKeyword = ref('')
+const newAutoReply = ref('')
+const newAction = ref('order')
+
+onMounted(() => {
+  rulesStore.fetchRules()
+  ordersStore.fetchOrders()
+
+  // 監聽新訂單
+  ordersStore.addOrderListener((order) => {
+    console.log('新訂單:', order)
+  })
 })
 
-const saveSettings = () => {
-  localStorage.setItem('app-settings', JSON.stringify(settings.value))
-  alert('設定已儲存')
+const addRule = async () => {
+  if (!newKeyword.value.trim()) return
+  await rulesStore.addRule(newKeyword.value.trim(), newAutoReply.value.trim(), newAction.value)
+  newKeyword.value = ''
+  newAutoReply.value = ''
+  newAction.value = 'order'
 }
 
-const resetSettings = () => {
-  settings.value = {
-    defaultUsername: '',
-    autoConnect: false,
-    notifications: true,
-    savePath: ''
+const toggleRule = async (rule) => {
+  await rulesStore.toggleRule(rule.id, !rule.enabled)
+}
+
+const deleteRule = async (id) => {
+  await rulesStore.deleteRule(id)
+}
+
+const actionLabel = (action) => {
+  switch (action) {
+    case 'order': return '列入訂單'
+    case 'reply': return '自動回覆'
+    case 'both': return '兩者'
+    default: return action
+  }
+}
+
+const loadHistory = async () => {
+  await ordersStore.fetchOrders()
+}
+
+const exportMessages = async () => {
+  const json = await databaseService.exportMessages()
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `messages_${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const clearAllMessages = async () => {
+  if (confirm('確定要清除所有訊息嗎？')) {
+    await databaseService.clearMessages()
+    alert('已清除')
   }
 }
 </script>
