@@ -12,6 +12,12 @@
     "postinstall": "electron-builder install-app-deps",
     "package": "electron-vite build && electron-builder --win --config"
   },
+  "build": {
+    "win": {
+      "sign": null,
+      "signAndEditExecutable": false
+    }
+  },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^11.8.1",
