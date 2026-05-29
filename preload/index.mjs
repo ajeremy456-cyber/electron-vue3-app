@@ -40,6 +40,8 @@ const db = {
   getMessages: (limit, offset) => ipcRenderer.invoke("db:getMessages", limit, offset),
   clearMessages: () => ipcRenderer.invoke("db:clearMessages"),
   exportMessages: () => ipcRenderer.invoke("db:exportMessages"),
+  // Expiration
+  getExpiration: () => ipcRenderer.invoke("db:getExpiration"),
   // Keyword Rules
   getKeywordRules: () => ipcRenderer.invoke("db:getKeywordRules"),
   addKeywordRule: (keyword, autoReply, action) => ipcRenderer.invoke("db:addKeywordRule", keyword, autoReply, action),

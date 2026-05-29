@@ -26,7 +26,9 @@ import {
   removeFromBlacklist,
   clearBlacklist,
   exportBlacklist,
-  getDb
+  getDb,
+  // Expiration
+  checkExpiration
 } from './database.js'
 
 log.initialize()
@@ -206,6 +208,9 @@ function setupDatabaseHandlers() {
   ipcMain.handle('db:clearMessages', () => { clearMessages(); return true })
   ipcMain.handle('db:exportMessages', () => exportMessagesToJson())
 
+  // Expiration
+  ipcMain.handle('db:getExpiration', () => checkExpiration())
+
   // Keyword Rules
   ipcMain.handle('db:getKeywordRules', () => getKeywordRules())
   ipcMain.handle('db:addKeywordRule', (_, keyword, autoReply, action) => {
@@ -246,6 +251,17 @@ app.whenReady().then(() => {
     log.info('Database initialized OK')
   } catch (err) {
     log.error('Database init failed:', err.message)
+  }
+
+  // 試用期檢查
+  const exp = checkExpiration()
+  log.info(`[Expiration] ${exp.remaining} days remaining (${exp.elapsed}/${exp.totalDays} days elapsed)`)
+  if (exp.expired) {
+    log.warn('[Expiration] Trial expired, showing dialog and exiting')
+    const { dialog } = require('electron')
+    dialog.showErrorBox('試用期已過期', `本程式試用期為 ${exp.totalDays} 天，已超過限制。\n請取得正式版授權。`)
+    app.exit(1)
+    return
   }
 
   setupTikTokHandlers()

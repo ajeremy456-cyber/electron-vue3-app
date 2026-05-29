@@ -47,6 +47,11 @@ function initDatabase() {
       FOREIGN KEY (rule_id) REFERENCES keyword_rules(id)
     );
 
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS blacklisted_users (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       nickname   TEXT    NOT NULL UNIQUE,
@@ -166,6 +171,28 @@ function deleteOrder(id) {
 }
 function clearOrders() {
   db.exec("DELETE FROM orders");
+}
+function getSetting(key) {
+  const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+  const row = stmt.get(key);
+  return row ? row.value : null;
+}
+function setSetting(key, value) {
+  const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+  stmt.run(key, value);
+}
+function checkExpiration() {
+  const TRIAL_DAYS = 14;
+  let startTime = getSetting("start_time");
+  if (!startTime) {
+    startTime = (/* @__PURE__ */ new Date()).toISOString();
+    setSetting("start_time", startTime);
+  }
+  const start = new Date(startTime).getTime();
+  const now = Date.now();
+  const elapsed = Math.floor((now - start) / (1e3 * 60 * 60 * 24));
+  const remaining = TRIAL_DAYS - elapsed;
+  return { remaining, elapsed, expired: remaining <= 0, totalDays: TRIAL_DAYS };
 }
 function exportMessagesToJson() {
   return JSON.stringify(getMessages(1e4), null, 2);
@@ -328,6 +355,7 @@ function setupDatabaseHandlers() {
     return true;
   });
   ipcMain.handle("db:exportMessages", () => exportMessagesToJson());
+  ipcMain.handle("db:getExpiration", () => checkExpiration());
   ipcMain.handle("db:getKeywordRules", () => getKeywordRules());
   ipcMain.handle("db:addKeywordRule", (_, keyword, autoReply, action) => {
     const result = addKeywordRule(keyword, autoReply, action);
@@ -363,6 +391,16 @@ app.whenReady().then(() => {
     log.info("Database initialized OK");
   } catch (err) {
     log.error("Database init failed:", err.message);
+  }
+  const exp = checkExpiration();
+  log.info(`[Expiration] ${exp.remaining} days remaining (${exp.elapsed}/${exp.totalDays} days elapsed)`);
+  if (exp.expired) {
+    log.warn("[Expiration] Trial expired, showing dialog and exiting");
+    const { dialog } = require2("electron");
+    dialog.showErrorBox("試用期已過期", `本程式試用期為 ${exp.totalDays} 天，已超過限制。
+請取得正式版授權。`);
+    app.exit(1);
+    return;
   }
   setupTikTokHandlers();
   setupDatabaseHandlers();

@@ -33,6 +33,9 @@ const db = {
   clearMessages: () => ipcRenderer.invoke('db:clearMessages'),
   exportMessages: () => ipcRenderer.invoke('db:exportMessages'),
 
+  // Expiration
+  getExpiration: () => ipcRenderer.invoke('db:getExpiration'),
+
   // Keyword Rules
   getKeywordRules: () => ipcRenderer.invoke('db:getKeywordRules'),
   addKeywordRule: (keyword, autoReply, action) =>

@@ -51,6 +51,11 @@ export function initDatabase() {
       FOREIGN KEY (rule_id) REFERENCES keyword_rules(id)
     );
 
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS blacklisted_users (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       nickname   TEXT    NOT NULL UNIQUE,
@@ -187,6 +192,33 @@ export function deleteOrder(id) {
 
 export function clearOrders() {
   db.exec('DELETE FROM orders')
+}
+
+// ============ Settings (Expiration) ============
+
+export function getSetting(key) {
+  const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
+  const row = stmt.get(key)
+  return row ? row.value : null
+}
+
+export function setSetting(key, value) {
+  const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+  stmt.run(key, value)
+}
+
+export function checkExpiration() {
+  const TRIAL_DAYS = 14
+  let startTime = getSetting('start_time')
+  if (!startTime) {
+    startTime = new Date().toISOString()
+    setSetting('start_time', startTime)
+  }
+  const start = new Date(startTime).getTime()
+  const now = Date.now()
+  const elapsed = Math.floor((now - start) / (1000 * 60 * 60 * 24))
+  const remaining = TRIAL_DAYS - elapsed
+  return { remaining, elapsed, expired: remaining <= 0, totalDays: TRIAL_DAYS }
 }
 
 // ============ Export ============
