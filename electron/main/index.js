@@ -25,7 +25,8 @@ import {
   addToBlacklist,
   removeFromBlacklist,
   clearBlacklist,
-  exportBlacklist
+  exportBlacklist,
+  getDb
 } from './database.js'
 
 log.initialize()
@@ -71,20 +72,29 @@ function createWindow() {
 
 // 檢查關鍵字並建立訂單
 function checkKeywordAndCreateOrder(nickname, text, time) {
-  const rules = getEnabledRules()
-  for (const rule of rules) {
-    if (text.includes(rule.keyword)) {
-      insertOrder({ rule_id: rule.id, keyword: rule.keyword, nickname, text, triggered_at: time })
-      mainWindow?.webContents.send('tiktok:order', {
-        keyword: rule.keyword,
-        nickname,
-        text,
-        time,
-        autoReply: rule.auto_reply
-      })
-      log.info(`Order triggered: keyword="${rule.keyword}" by @${nickname}`)
-      break
+  try {
+    const rules = getEnabledRules()
+    log.info(`[KeywordCheck] @${nickname}: "${text}" | ${rules.length} rules loaded`)
+    if (rules.length === 0) return
+
+    const normalizedText = text.trim()
+    for (const rule of rules) {
+      if (normalizedText.includes(rule.keyword.trim())) {
+        log.info(`[OrderTrigger] keyword="${rule.keyword}" matched by @${nickname}`)
+        insertOrder({ rule_id: rule.id, keyword: rule.keyword, nickname, text, triggered_at: time })
+        mainWindow?.webContents.send('tiktok:order', {
+          keyword: rule.keyword,
+          nickname,
+          text,
+          time,
+          autoReply: rule.auto_reply
+        })
+        log.info(`Order created: keyword="${rule.keyword}" by @${nickname}`)
+        break
+      }
     }
+  } catch (err) {
+    log.error('[KeywordCheck] Error:', err.message)
   }
 }
 
@@ -102,39 +112,57 @@ function setupTikTokHandlers() {
       tiktokConnection = new TikTokLiveConnection(uniqueId, {})
 
       tiktokConnection.on('chat', (data) => {
-        const nickname = data.user?.nickname || data.uniqueId || '匿名'
-        const text = data.content || data.comment || ''
-        const time = new Date().toLocaleTimeString()
+        try {
+          const nickname = data.user?.nickname || data.uniqueId || '匿名'
+          const text = (data.content || data.comment || '').trim()
+          const time = new Date().toLocaleTimeString()
 
-        if (isBlacklisted(nickname)) {
-          log.info(`Blocked message from @${nickname}`)
-          return
+          if (!text) {
+            log.info(`[Chat] @${nickname} - empty message, skipping`)
+            return
+          }
+
+          if (isBlacklisted(nickname)) {
+            log.info(`[Block] @${nickname} is blacklisted`)
+            return
+          }
+
+          const payload = { nickname, text, time }
+          insertMessage({ ...payload, type: 'chat', raw_json: data })
+          checkKeywordAndCreateOrder(nickname, text, time)
+          mainWindow?.webContents.send('tiktok:chat', payload)
+          log.info(`[Chat] @${nickname}: ${text}`)
+        } catch (err) {
+          log.error('[Chat] Handler error:', err.message)
         }
-
-        const payload = { nickname, text, time }
-        insertMessage({ ...payload, type: 'chat', raw_json: data })
-        checkKeywordAndCreateOrder(nickname, text, time)
-        mainWindow?.webContents.send('tiktok:chat', payload)
       })
 
       tiktokConnection.on('gift', (data) => {
-        const nickname = data.user?.nickname || data.uniqueId || '匿名'
-        const time = new Date().toLocaleTimeString()
-        if (isBlacklisted(nickname)) return
-        const giftName = data.giftName || data.gift?.giftName || '禮物'
-        const repeatCount = data.repeatCount || data.gift?.repeatCount || 1
-        const payload = { nickname, text: `送禮物: ${giftName} x${repeatCount}`, time }
-        insertMessage({ ...payload, type: 'gift', raw_json: data })
-        mainWindow?.webContents.send('tiktok:gift', payload)
+        try {
+          const nickname = data.user?.nickname || data.uniqueId || '匿名'
+          const time = new Date().toLocaleTimeString()
+          if (isBlacklisted(nickname)) return
+          const giftName = data.giftName || data.gift?.giftName || '禮物'
+          const repeatCount = data.repeatCount || data.gift?.repeatCount || 1
+          const payload = { nickname, text: `送禮物: ${giftName} x${repeatCount}`, time }
+          insertMessage({ ...payload, type: 'gift', raw_json: data })
+          mainWindow?.webContents.send('tiktok:gift', payload)
+        } catch (err) {
+          log.error('[Gift] Handler error:', err.message)
+        }
       })
 
       tiktokConnection.on('member', (data) => {
-        const nickname = data.user?.nickname || data.uniqueId || '匿名'
-        const time = new Date().toLocaleTimeString()
-        if (isBlacklisted(nickname)) return
-        const payload = { nickname, text: '進入了直播間', time }
-        insertMessage({ ...payload, type: 'member', raw_json: data })
-        mainWindow?.webContents.send('tiktok:member', payload)
+        try {
+          const nickname = data.user?.nickname || data.uniqueId || '匿名'
+          const time = new Date().toLocaleTimeString()
+          if (isBlacklisted(nickname)) return
+          const payload = { nickname, text: '進入了直播間', time }
+          insertMessage({ ...payload, type: 'member', raw_json: data })
+          mainWindow?.webContents.send('tiktok:member', payload)
+        } catch (err) {
+          log.error('[Member] Handler error:', err.message)
+        }
       })
 
       tiktokConnection.on('streamEnd', () => {
@@ -180,8 +208,11 @@ function setupDatabaseHandlers() {
 
   // Keyword Rules
   ipcMain.handle('db:getKeywordRules', () => getKeywordRules())
-  ipcMain.handle('db:addKeywordRule', (_, keyword, autoReply, action) =>
-    addKeywordRule(keyword, autoReply, action))
+  ipcMain.handle('db:addKeywordRule', (_, keyword, autoReply, action) => {
+    const result = addKeywordRule(keyword, autoReply, action)
+    log.info(`[DB] addKeywordRule("${keyword}", "${autoReply}", "${action}") => ${result}`)
+    return result
+  })
   ipcMain.handle('db:updateKeywordRule', (_, id, updates) =>
     updateKeywordRule(id, updates))
   ipcMain.handle('db:deleteKeywordRule', (_, id) => deleteKeywordRule(id))
@@ -210,7 +241,12 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  try { initDatabase() } catch (err) { log.error('Database init failed:', err.message) }
+  try {
+    initDatabase()
+    log.info('Database initialized OK')
+  } catch (err) {
+    log.error('Database init failed:', err.message)
+  }
 
   setupTikTokHandlers()
   setupDatabaseHandlers()
