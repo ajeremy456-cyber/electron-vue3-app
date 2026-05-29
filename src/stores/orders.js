@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import databaseService from '@/services/database'
+import * as XLSX from 'xlsx'
 
 export const useOrdersStore = defineStore('orders', () => {
   const orders = ref([])
@@ -37,14 +38,27 @@ export const useOrdersStore = defineStore('orders', () => {
   }
 
   const exportOrders = async () => {
-    const json = await databaseService.exportOrders()
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `orders_${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    const data = await databaseService.getOrders(10000)
+    if (data.length === 0) {
+      alert('尚無訂單資料')
+      return
+    }
+    // Build worksheet data with Chinese headers
+    const wsData = [
+      ['ID', '觸發時間', '關鍵字', '用戶暱稱', '訊息內容', '自動回覆'],
+      ...data.map(o => [
+        o.id,
+        o.triggered_at,
+        o.keyword,
+        o.nickname,
+        o.text,
+        o.auto_reply || ''
+      ])
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '準訂單')
+    XLSX.writeFile(wb, `orders_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   return {

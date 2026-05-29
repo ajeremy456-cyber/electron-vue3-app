@@ -172,7 +172,7 @@
             重新整理
           </button>
           <button @click="ordersStore.exportOrders()" class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
-            匯出 JSON
+            匯出 Excel
           </button>
           <button @click="ordersStore.clearOrders()" class="px-4 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100">
             清除全部
@@ -230,7 +230,7 @@
           讀取歷史訊息
         </button>
         <button @click="exportMessages" class="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
-          匯出訊息 JSON
+          匯出訊息 Excel
         </button>
         <button @click="clearAllMessages" class="px-5 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm">
           清除訊息
@@ -245,6 +245,7 @@ import { ref, onMounted } from 'vue'
 import { useRulesStore } from '@/stores/rules'
 import { useOrdersStore } from '@/stores/orders'
 import databaseService from '@/services/database'
+import * as XLSX from 'xlsx'
 
 const rulesStore = useRulesStore()
 const ordersStore = useOrdersStore()
@@ -287,14 +288,19 @@ const clearBlack = async () => {
 }
 
 const exportBlack = async () => {
-  const json = await databaseService.exportBlacklist()
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `blacklist_${new Date().toISOString().slice(0, 10)}.json`
-  a.click()
-  URL.revokeObjectURL(url)
+  const data = await databaseService.getBlacklist()
+  if (data.length === 0) {
+    alert('黑名單是空的')
+    return
+  }
+  const wsData = [
+    ['ID', '暱稱', '原因', '加入時間'],
+    ...data.map(u => [u.id, u.nickname, u.reason || '', u.created_at?.slice(0, 10) || ''])
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '黑名單')
+  XLSX.writeFile(wb, `blacklist_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 const addRule = async () => {
@@ -323,14 +329,19 @@ const actionLabel = (action) => {
 }
 
 const exportMessages = async () => {
-  const json = await databaseService.exportMessages()
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `messages_${new Date().toISOString().slice(0, 10)}.json`
-  a.click()
-  URL.revokeObjectURL(url)
+  const data = await databaseService.getMessages(10000)
+  if (data.length === 0) {
+    alert('尚無訊息資料')
+    return
+  }
+  const wsData = [
+    ['ID', '時間', '類型', '暱稱', '內容'],
+    ...data.map(m => [m.id, m.time, m.type, m.nickname, m.text])
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '訊息記錄')
+  XLSX.writeFile(wb, `messages_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 const clearAllMessages = async () => {
