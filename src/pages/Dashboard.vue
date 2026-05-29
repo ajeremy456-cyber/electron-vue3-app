@@ -18,7 +18,8 @@
       </div>
     </div>
 
-    <div class="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+    <!--
+     <div class="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-200">
       <h3 class="text-lg font-semibold mb-4">系統資訊</h3>
       <div class="space-y-3">
         <div class="flex justify-between items-center">
@@ -39,7 +40,7 @@
         </div>
       </div>
     </div>
-
+     -->
     <div class="mt-8 bg-blue-50 rounded-xl shadow-sm p-6 border border-blue-100">
       <h3 class="text-lg font-semibold mb-2 text-blue-800">💡 使用說明</h3>
       <ol class="text-sm text-blue-700 space-y-1 list-decimal list-inside">
