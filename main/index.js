@@ -238,21 +238,24 @@ function setupTikTokHandlers() {
       tiktokConnection = new TikTokLiveConnection(uniqueId, {});
       tiktokConnection.on("chat", (data) => {
         const nickname = data.user?.nickname || data.uniqueId || "匿名";
+        const text = data.content || data.comment || "";
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString();
         if (isBlacklisted(nickname)) {
           log.info(`Blocked message from @${nickname}`);
           return;
         }
-        const payload = { nickname, text: data.comment, time };
+        const payload = { nickname, text, time };
         insertMessage({ ...payload, type: "chat", raw_json: data });
-        checkKeywordAndCreateOrder(nickname, data.comment, time);
+        checkKeywordAndCreateOrder(nickname, text, time);
         mainWindow?.webContents.send("tiktok:chat", payload);
       });
       tiktokConnection.on("gift", (data) => {
         const nickname = data.user?.nickname || data.uniqueId || "匿名";
         const time = (/* @__PURE__ */ new Date()).toLocaleTimeString();
         if (isBlacklisted(nickname)) return;
-        const payload = { nickname, text: `送禮物: ${data.giftName} x${data.repeatCount}`, time };
+        const giftName = data.giftName || data.gift?.giftName || "禮物";
+        const repeatCount = data.repeatCount || data.gift?.repeatCount || 1;
+        const payload = { nickname, text: `送禮物: ${giftName} x${repeatCount}`, time };
         insertMessage({ ...payload, type: "gift", raw_json: data });
         mainWindow?.webContents.send("tiktok:gift", payload);
       });
