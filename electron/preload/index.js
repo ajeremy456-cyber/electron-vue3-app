@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// 平台版本資訊
 const api = {
   platform: process.platform,
   versions: {
@@ -10,30 +9,17 @@ const api = {
   }
 }
 
-// TikTok IPC 頻道
 const tiktok = {
   connect: (uniqueId) => ipcRenderer.invoke('tiktok:connect', uniqueId),
   disconnect: () => ipcRenderer.invoke('tiktok:disconnect'),
   status: () => ipcRenderer.invoke('tiktok:status'),
 
-  onChat: (callback) => {
-    ipcRenderer.on('tiktok:chat', (_, data) => callback(data))
-  },
-  onGift: (callback) => {
-    ipcRenderer.on('tiktok:gift', (_, data) => callback(data))
-  },
-  onMember: (callback) => {
-    ipcRenderer.on('tiktok:member', (_, data) => callback(data))
-  },
-  onStreamEnd: (callback) => {
-    ipcRenderer.on('tiktok:streamEnd', (_, data) => callback(data))
-  },
-  onDisconnect: (callback) => {
-    ipcRenderer.on('tiktok:disconnect', (_, data) => callback(data))
-  },
-  onOrder: (callback) => {
-    ipcRenderer.on('tiktok:order', (_, data) => callback(data))
-  },
+  onChat: (callback) => { ipcRenderer.on('tiktok:chat', (_, data) => callback(data)) },
+  onGift: (callback) => { ipcRenderer.on('tiktok:gift', (_, data) => callback(data)) },
+  onMember: (callback) => { ipcRenderer.on('tiktok:member', (_, data) => callback(data)) },
+  onStreamEnd: (callback) => { ipcRenderer.on('tiktok:streamEnd', (_, data) => callback(data)) },
+  onDisconnect: (callback) => { ipcRenderer.on('tiktok:disconnect', (_, data) => callback(data)) },
+  onOrder: (callback) => { ipcRenderer.on('tiktok:order', (_, data) => callback(data)) },
   removeAllListeners: () => {
     ;['chat', 'gift', 'member', 'streamEnd', 'disconnect', 'order'].forEach((ev) => {
       ipcRenderer.removeAllListeners(`tiktok:${ev}`)
@@ -41,7 +27,6 @@ const tiktok = {
   }
 }
 
-// Database IPC 頻道
 const db = {
   // Messages
   getMessages: (limit, offset) => ipcRenderer.invoke('db:getMessages', limit, offset),
@@ -60,7 +45,14 @@ const db = {
   getOrders: (limit) => ipcRenderer.invoke('db:getOrders', limit),
   deleteOrder: (id) => ipcRenderer.invoke('db:deleteOrder', id),
   clearOrders: () => ipcRenderer.invoke('db:clearOrders'),
-  exportOrders: () => ipcRenderer.invoke('db:exportOrders')
+  exportOrders: () => ipcRenderer.invoke('db:exportOrders'),
+
+  // Blacklist
+  getBlacklist: () => ipcRenderer.invoke('db:getBlacklist'),
+  addToBlacklist: (nickname, reason) => ipcRenderer.invoke('db:addToBlacklist', nickname, reason),
+  removeFromBlacklist: (id) => ipcRenderer.invoke('db:removeFromBlacklist', id),
+  clearBlacklist: () => ipcRenderer.invoke('db:clearBlacklist'),
+  exportBlacklist: () => ipcRenderer.invoke('db:exportBlacklist')
 }
 
 contextBridge.exposeInMainWorld('tiktok', tiktok)

@@ -2,8 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import log from 'electron-log/main'
-import pkg from 'tiktok-live-connector'
-const { TikTokLiveConnection } = pkg
+import { TikTokLiveConnection } from 'tiktok-live-connector'
 import {
   initDatabase,
   insertMessage,
@@ -19,10 +18,16 @@ import {
   deleteOrder,
   clearOrders,
   exportMessagesToJson,
-  exportOrdersToJson
+  exportOrdersToJson,
+  // Blacklist
+  isBlacklisted,
+  getBlacklist,
+  addToBlacklist,
+  removeFromBlacklist,
+  clearBlacklist,
+  exportBlacklist
 } from './database.js'
 
-// 初始化日誌
 log.initialize()
 log.info('App starting...')
 
@@ -69,14 +74,7 @@ function checkKeywordAndCreateOrder(nickname, text, time) {
   const rules = getEnabledRules()
   for (const rule of rules) {
     if (text.includes(rule.keyword)) {
-      // 建立準訂單
-      insertOrder({
-        rule_id: rule.id,
-        keyword: rule.keyword,
-        nickname,
-        text,
-        triggered_at: time
-      })
+      insertOrder({ rule_id: rule.id, keyword: rule.keyword, nickname, text, triggered_at: time })
       mainWindow?.webContents.send('tiktok:order', {
         keyword: rule.keyword,
         nickname,
@@ -85,15 +83,14 @@ function checkKeywordAndCreateOrder(nickname, text, time) {
         autoReply: rule.auto_reply
       })
       log.info(`Order triggered: keyword="${rule.keyword}" by @${nickname}`)
-      break // 一個訊息只觸發一個規則
+      break
     }
   }
 }
 
 // TikTok IPC Handlers
 function setupTikTokHandlers() {
-  // 連接到直播間
-  ipcMain.handle('tiktok:connect', async (event, uniqueId) => {
+  ipcMain.handle('tiktok:connect', async (_, uniqueId) => {
     try {
       log.info(`TikTok: connecting to @${uniqueId}`)
 
@@ -102,25 +99,28 @@ function setupTikTokHandlers() {
         tiktokConnection = null
       }
 
-      tiktokConnection = new TikTokLiveConnection(uniqueId)
+      tiktokConnection = new TikTokLiveConnection(uniqueId, {})
 
       tiktokConnection.on('chat', (data) => {
         const nickname = data.user?.nickname || data.uniqueId || '匿名'
         const time = new Date().toLocaleTimeString()
+
+        // 黑名單檢查
+        if (isBlacklisted(nickname)) {
+          log.info(`Blocked message from @${nickname}`)
+          return
+        }
+
         const payload = { nickname, text: data.comment, time }
-
-        // 存入資料庫
         insertMessage({ ...payload, type: 'chat', raw_json: data })
-
-        // 檢查關鍵字
         checkKeywordAndCreateOrder(nickname, data.comment, time)
-
         mainWindow?.webContents.send('tiktok:chat', payload)
       })
 
       tiktokConnection.on('gift', (data) => {
         const nickname = data.user?.nickname || data.uniqueId || '匿名'
         const time = new Date().toLocaleTimeString()
+        if (isBlacklisted(nickname)) return
         const payload = { nickname, text: `送禮物: ${data.giftName} x${data.repeatCount}`, time }
         insertMessage({ ...payload, type: 'gift', raw_json: data })
         mainWindow?.webContents.send('tiktok:gift', payload)
@@ -129,6 +129,7 @@ function setupTikTokHandlers() {
       tiktokConnection.on('member', (data) => {
         const nickname = data.user?.nickname || data.uniqueId || '匿名'
         const time = new Date().toLocaleTimeString()
+        if (isBlacklisted(nickname)) return
         const payload = { nickname, text: '進入了直播間', time }
         insertMessage({ ...payload, type: 'member', raw_json: data })
         mainWindow?.webContents.send('tiktok:member', payload)
@@ -188,6 +189,15 @@ function setupDatabaseHandlers() {
   ipcMain.handle('db:deleteOrder', (_, id) => deleteOrder(id))
   ipcMain.handle('db:clearOrders', () => { clearOrders(); return true })
   ipcMain.handle('db:exportOrders', () => exportOrdersToJson())
+
+  // Blacklist
+  ipcMain.handle('db:getBlacklist', () => getBlacklist())
+  ipcMain.handle('db:addToBlacklist', (_, nickname, reason) =>
+    addToBlacklist(nickname, reason))
+  ipcMain.handle('db:removeFromBlacklist', (_, id) =>
+    removeFromBlacklist(id))
+  ipcMain.handle('db:clearBlacklist', () => { clearBlacklist(); return true })
+  ipcMain.handle('db:exportBlacklist', () => exportBlacklist())
 }
 
 app.whenReady().then(() => {
@@ -198,12 +208,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // 初始化資料庫
-  try {
-    initDatabase()
-  } catch (err) {
-    log.error('Database init failed:', err.message)
-  }
+  try { initDatabase() } catch (err) { log.error('Database init failed:', err.message) }
 
   setupTikTokHandlers()
   setupDatabaseHandlers()
